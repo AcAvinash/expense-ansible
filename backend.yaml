@@ -66,9 +66,26 @@
       ansible.builtin.dnf:
         name: mysql-server
         state: installed
+
+    # --- Add these tasks after MySQL installation ---
+    - name: Ensure backend database exists
+      ansible.builtin.mysql_db:
+        name: backend
+        state: present
+        login_host: mysql.joindevops.fun
+        login_user: root
+        login_password: "ExpenseApp@1"
+
     - name: Load backend schema into mysql
-      ansible.builtin.shell:
-        cmd: mysql -h mysql.joindevops.fun -uroot -pExpenseApp@1 < /app/schema/backend.sql
+      ansible.builtin.mysql_db:
+        name: backend
+        state: import
+        target: /app/schema/backend.sql
+        login_host: mysql.joindevops.fun
+        login_user: root
+        login_password: "ExpenseApp@1"
+    # --- End of new tasks ---
+
     - name: Restart backend service
       ansible.builtin.service:
         name: backend
