@@ -1,128 +1,73 @@
-- name: backend component
+- name: configure backend server
   hosts: backend
-  become: true
+  become: yes
   vars:
-    ansible_python_interpreter: /usr/bin/python3
-
+    mysql_root_password: ExpenseApp@1
+    login_host: mysql.joindevops.fun
   tasks:
-    - name: Disable nodejs
-      ansible.builtin.dnf:
-        name: nodejs
-        state: absent
+  - name: disable default nodejs
+    ansible.builtin.command: dnf module disable nodejs -y
 
-    - name: Enable Node.js 20 repo
-      ansible.builtin.command:
-        cmd: dnf module enable nodejs:20 -y
+  - name: enable nodejs 20
+    ansible.builtin.command: dnf module enable nodejs:20 -y
 
-    - name: Install Node.js
-      ansible.builtin.dnf:
-        name: nodejs
-        state: installed
+  - name: install nodejs
+    ansible.builtin.package:
+      name: "{{ item }}"
+      state: present
+    loop:
+    - nodejs
+    - mysql
 
-    - name: Check if expense user exists
-      ansible.builtin.command:
-        cmd: id expense
-      register: out
-      ignore_errors: true
+  - name: create expense user
+    ansible.builtin.user:
+      name: expense
 
-    - name: Create expense user if not exists
-      ansible.builtin.user:
-        name: expense
-      when: out.rc != 0
+  - name: create app directory
+    ansible.builtin.file:
+      path: /app
+      state: directory
 
-    - name: Check if /app directory exists
-      ansible.builtin.stat:
-        path: /app
-      register: directory
+  - name: download the backend code
+    ansible.builtin.get_url:
+      url: https://expense-builds.s3.us-east-1.amazonaws.com/expense-backend-v2.zip
+      dest: /tmp/backend.zip
 
-    - name: Create /app directory if not exists
-      ansible.builtin.file:
-        path: /app
-        state: directory
-      when: directory.stat.exists == False
+  - name: extract the code
+    ansible.builtin.unarchive:
+      src: /tmp/backend.zip #by default ansible thinks this is in ansible server
+      dest: /app
+      remote_src: yes
 
-    - name: Download the application code
-      ansible.builtin.get_url:
-        url: https://expense-artifacts.s3.amazonaws.com/expense-backend-v2.zip
-        dest: /tmp/backend.zip
+  - name: install dependencies
+    ansible.builtin.command: npm install
+    args:
+      chdir: /app
 
-    - name: Unzip the downloaded application code
-      ansible.builtin.unarchive:
-        src: /tmp/backend.zip
-        dest: /app
-        remote_src: yes
+  - name: copy backend service
+    ansible.builtin.copy:
+      src: backend.service
+      dest: /etc/systemd/system/backend.service
 
-    - name: Install application dependencies
-      ansible.builtin.command:
-        cmd: npm install
-      args:
-        chdir: /app
+  - name: ansible to install pymysql
+    ansible.builtin.pip:
+      name:
+      - PyMySQL
+      - cryptography
+      executable: pip3.9
 
-    - name: Set up the backend service
-      ansible.builtin.copy:
-        src: backend.service
-        dest: /etc/systemd/system/backend.service
+  - name: import mysql data
+    community.mysql.mysql_db:
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      login_host: "{{ login_host }}"
+      target: /app/schema/backend.sql
+      name: all
+      state: import
 
-    - name: Reload systemd daemon
-      ansible.builtin.systemd:
-        daemon_reload: true
-
-    - name: Install MySQL server
-      ansible.builtin.dnf:
-        name: mysql-server
-        state: installed
-
-    - name: Install Python3 and pip
-      ansible.builtin.dnf:
-        name:
-          - python3
-          - python3-pip
-        state: present
-
-    - name: Install PyMySQL and cryptography via pip
-      ansible.builtin.pip:
-        name:
-          - PyMySQL
-          - cryptography
-        executable: pip3
-
-    - name: Ensure backend database exists
-      community.mysql.mysql_db:
-        name: backend
-        state: present
-        login_host: mysql.joindevops.fun
-        login_user: root
-        login_password: "ExpenseApp@1"
-
-    - name: Load backend schema into MySQL
-      community.mysql.mysql_db:
-        name: backend
-        state: import
-        target: /app/schema/backend.sql
-        login_host: mysql.joindevops.fun
-        login_user: root
-        login_password: "ExpenseApp@1"
-
-    - name: Start and enable backend service
-      ansible.builtin.service:
-        name: backend
-        state: started
-        enabled: true
-
-    - name: Restart backend service (after DB is ready)
-      ansible.builtin.service:
-        name: backend
-        state: restarted
-
-    - name: Check backend health
-      ansible.builtin.uri:
-        url: http://localhost:3000/health
-        return_content: yes
-      register: backend_status
-      retries: 5
-      delay: 5
-      until: backend_status.status == 200
-
-    - debug:
-        msg: "Backend is running and healthy!"
+  - name: daemon reload
+    ansible.builtin.systemd_service:
+      daemon_reload: true
+      state: restarted
+      name: backend
 
