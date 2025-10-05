@@ -1,0 +1,75 @@
+- name: backend component
+  hosts: backend
+  become: true
+  tasks:
+    - name: disable nodejs
+      ansible.builtin.dnf:
+        name: nodejs
+        state: absent
+    - name: enable node.js 20 repo
+      ansible.builtin.command:
+        cmd: dnf module enable nodejs:20 -y
+
+    - name: Install Node.js
+      ansible.builtin.dnf:
+        name: nodejs
+        state: installed
+    - name: check id expense user exists or not
+      ansible.builtin.command:
+        cmd: id expense
+      register: out
+      ignore_errors: true
+    - name: Create expense user if not exists
+      ansible.builtin.user:
+        name: expense
+      when: out.rc!=0
+    - name: Check if /app directory exists
+      ansible.builtin.stat:
+        path: /app
+      register: directory
+    - name: Create /app directory if not exists
+      ansible.builtin.file:
+        path: /app
+        state: directory
+      when: directory.stat.exists == False
+    - name: Download the application code
+      ansible.builtin.get_url:
+        url: https://expense-artifacts.s3.amazonaws.com/expense-backend-v2.zip
+        dest: /tmp
+
+    - name: Unzip the downloaded application code
+      ansible.builtin.unarchive:
+        src: /tmp/catalogue.zip
+        dest: /app
+        remote_src: yes
+
+    - name: Install application dependencies
+      ansible.builtin.command:
+        cmd: npm install
+      args:
+        chdir: /app
+    - name: Set up the catalogue service
+      ansible.builtin.copy:
+        src: backend.service
+        dest: /etc/systemd/system/backend.service
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Start and enable backend service
+      ansible.builtin.service:
+        name: backend
+        state: started
+        enabled: true
+
+    - name: Installation of mysql-server
+      ansible.builtin.dnf:
+        name: mysql-server
+        state: installed
+    - name: Load catalogue schema into MongoDB
+      ansible.builtin.shell:
+        cmd: mysql -h mysql.joindevops.fun -uroot -pExpenseApp@1 < /app/schema/backend.sql
+    - name: Restart backend service
+      ansible.builtin.service:
+        name: backend
+        state: restarted
