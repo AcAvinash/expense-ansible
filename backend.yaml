@@ -1,12 +1,16 @@
 - name: backend component
   hosts: backend
   become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
   tasks:
-    - name: disable nodejs
+    - name: Disable nodejs
       ansible.builtin.dnf:
         name: nodejs
         state: absent
-    - name: enable node.js 20 repo
+
+    - name: Enable Node.js 20 repo
       ansible.builtin.command:
         cmd: dnf module enable nodejs:20 -y
 
@@ -14,24 +18,29 @@
       ansible.builtin.dnf:
         name: nodejs
         state: installed
-    - name: check id expense user exists or not
+
+    - name: Check if expense user exists
       ansible.builtin.command:
         cmd: id expense
       register: out
       ignore_errors: true
+
     - name: Create expense user if not exists
       ansible.builtin.user:
         name: expense
-      when: out.rc!=0
+      when: out.rc != 0
+
     - name: Check if /app directory exists
       ansible.builtin.stat:
         path: /app
       register: directory
+
     - name: Create /app directory if not exists
       ansible.builtin.file:
         path: /app
         state: directory
       when: directory.stat.exists == False
+
     - name: Download the application code
       ansible.builtin.get_url:
         url: https://expense-artifacts.s3.amazonaws.com/expense-backend-v2.zip
@@ -48,13 +57,51 @@
         cmd: npm install
       args:
         chdir: /app
+
     - name: Set up the backend service
       ansible.builtin.copy:
         src: backend.service
         dest: /etc/systemd/system/backend.service
+
     - name: Reload systemd daemon
       ansible.builtin.systemd:
         daemon_reload: true
+
+    - name: Install MySQL server
+      ansible.builtin.dnf:
+        name: mysql-server
+        state: installed
+
+    - name: Install Python3 and pip
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install PyMySQL and cryptography via pip
+      ansible.builtin.pip:
+        name:
+          - PyMySQL
+          - cryptography
+        executable: pip3
+
+    - name: Ensure backend database exists
+      community.mysql.mysql_db:
+        name: backend
+        state: present
+        login_host: mysql.joindevops.fun
+        login_user: root
+        login_password: "ExpenseApp@1"
+
+    - name: Load backend schema into MySQL
+      community.mysql.mysql_db:
+        name: backend
+        state: import
+        target: /app/schema/backend.sql
+        login_host: mysql.joindevops.fun
+        login_user: root
+        login_password: "ExpenseApp@1"
 
     - name: Start and enable backend service
       ansible.builtin.service:
@@ -62,31 +109,20 @@
         state: started
         enabled: true
 
-    - name: Installation of mysql-server
-      ansible.builtin.dnf:
-        name: mysql-server
-        state: installed
-
-    # --- Add these tasks after MySQL installation ---
-    - name: Ensure backend database exists
-      ansible.builtin.mysql_db:
-        name: backend
-        state: present
-        login_host: mysql.joindevops.fun
-        login_user: root
-        login_password: "ExpenseApp@1"
-
-    - name: Load backend schema into mysql
-      ansible.builtin.mysql_db:
-        name: backend
-        state: import
-        target: /app/schema/backend.sql
-        login_host: mysql.joindevops.fun
-        login_user: root
-        login_password: "ExpenseApp@1"
-    # --- End of new tasks ---
-
-    - name: Restart backend service
+    - name: Restart backend service (after DB is ready)
       ansible.builtin.service:
         name: backend
         state: restarted
+
+    - name: Check backend health
+      ansible.builtin.uri:
+        url: http://localhost:3000/health
+        return_content: yes
+      register: backend_status
+      retries: 5
+      delay: 5
+      until: backend_status.status == 200
+
+    - debug:
+        msg: "Backend is running and healthy!"
+
