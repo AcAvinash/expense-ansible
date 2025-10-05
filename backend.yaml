@@ -35,7 +35,7 @@
     - name: Download the application code
       ansible.builtin.get_url:
         url: https://expense-artifacts.s3.amazonaws.com/expense-backend-v2.zip
-        dest: /tmp
+        dest: /tmp/backend.zip
 
     - name: Unzip the downloaded application code
       ansible.builtin.unarchive:
