@@ -39,7 +39,7 @@
 
     - name: Unzip the downloaded application code
       ansible.builtin.unarchive:
-        src: /tmp/catalogue.zip
+        src: /tmp/backend.zip
         dest: /app
         remote_src: yes
 
@@ -48,7 +48,7 @@
         cmd: npm install
       args:
         chdir: /app
-    - name: Set up the catalogue service
+    - name: Set up the backend service
       ansible.builtin.copy:
         src: backend.service
         dest: /etc/systemd/system/backend.service
@@ -66,7 +66,7 @@
       ansible.builtin.dnf:
         name: mysql-server
         state: installed
-    - name: Load catalogue schema into MongoDB
+    - name: Load backend schema into mysql
       ansible.builtin.shell:
         cmd: mysql -h mysql.joindevops.fun -uroot -pExpenseApp@1 < /app/schema/backend.sql
     - name: Restart backend service
