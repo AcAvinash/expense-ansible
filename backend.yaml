@@ -1,5 +1,5 @@
 - name: configure backend server
-  hosts: backend
+  hosts: localhost
   become: yes
   vars:
     mysql_root_password: ExpenseApp@1
