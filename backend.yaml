@@ -1,9 +1,9 @@
 - name: configure backend server
   hosts: backend
   become: yes
-  vars:
-    mysql_root_password: ExpenseApp@1
-    login_host: mysql.joindevops.fun
+  # vars:
+  #   mysql_root_password: ExpenseApp@1
+  #   login_host: mysql.joindevops.fun
   tasks:
   - name: disable default nodejs
     ansible.builtin.command: dnf module disable nodejs -y
@@ -59,8 +59,8 @@
   - name: import mysql data
     community.mysql.mysql_db:
       login_user: root
-      login_password: "{{ mysql_root_password }}"
-      login_host: "{{ login_host }}"
+      login_password: ExpenseApp@1
+      login_host: mysql.joindevops.fun
       target: /app/schema/backend.sql
       name: all
       state: import
