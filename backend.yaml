@@ -60,7 +60,7 @@
     community.mysql.mysql_db:
       login_user: root
       login_password: ExpenseApp@1
-      login_host: 10.0.21.212 
+      login_host: mysql.joindevops.fun
       target: /app/schema/backend.sql
       name: all
       state: import
