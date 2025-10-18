@@ -1,9 +1,7 @@
 - name: configure backend server
   hosts: backend
   become: yes
-  # vars:
-  #   mysql_root_password: ExpenseApp@1
-  #   login_host: mysql.joindevops.fun
+
   tasks:
   - name: disable default nodejs
     ansible.builtin.command: dnf module disable nodejs -y
@@ -11,13 +9,12 @@
   - name: enable nodejs 20
     ansible.builtin.command: dnf module enable nodejs:20 -y
 
-  - name: install nodejs
+  - name: install nodejs and mysql client
     ansible.builtin.package:
-      name: "{{ item }}"
+      name:
+      - nodejs
+      - mysql
       state: present
-    loop:
-    - nodejs
-    - mysql
 
   - name: create expense user
     ansible.builtin.user:
@@ -35,7 +32,7 @@
 
   - name: extract the code
     ansible.builtin.unarchive:
-      src: /tmp/backend.zip #by default ansible thinks this is in ansible server
+      src: /tmp/backend.zip
       dest: /app
       remote_src: yes
 
@@ -44,12 +41,12 @@
     args:
       chdir: /app
 
-  - name: copy backend service
+  - name: copy backend service file
     ansible.builtin.copy:
       src: backend.service
       dest: /etc/systemd/system/backend.service
 
-  - name: ansible to install pymysql
+  - name: install pymysql
     ansible.builtin.pip:
       name:
       - PyMySQL
@@ -62,12 +59,16 @@
       login_password: "ExpenseApp@1"
       login_host: "mysql.joindevops.fun"
       target: /app/schema/backend.sql
-      name: all
       state: import
+      name: "{{ item }}"
+    with_items:
+    - backend
 
-  - name: daemon reload
+  - name: reload and start backend service
     ansible.builtin.systemd:
-      daemon_reload: true
-      state: restarted
       name: backend
+      state: restarted
+      enabled: yes
+      daemon_reload: true
+
 
